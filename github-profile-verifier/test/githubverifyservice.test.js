@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const app = require("../src/app");
 
 const {
   buildGeminiPrompt,
@@ -248,4 +249,161 @@ test("verifyGithubProjects rejects invalid input before any API call", async () 
       error.statusCode === 400 &&
       error.message === "Provide resumeText or resumeProjects with at least one project.",
   );
+});
+
+test("POST /api/verify/github returns a normalized GitHub profile response", async () => {
+  const originalFetch = global.fetch;
+
+  global.fetch = async (url, options = {}) => {
+    if (String(url).startsWith("http://127.0.0.1:")) {
+      return originalFetch(url, options);
+    }
+
+    if (String(url) === "https://api.github.com/users/octocat") {
+      return createJsonResponse(200, {
+        login: "octocat",
+        html_url: "https://github.com/octocat",
+        avatar_url: "https://avatars.githubusercontent.com/u/1?v=4",
+        name: "The Octocat",
+        bio: "Mascot",
+        company: "@github",
+        location: "San Francisco",
+        public_repos: 8,
+        public_gists: 8,
+        followers: 100,
+        following: 9,
+        created_at: "2011-01-25T18:44:36Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      });
+    }
+
+    throw new Error(`Unexpected fetch call: ${url}`);
+  };
+
+  const server = app.listen(0);
+  await new Promise((resolve) => server.once("listening", resolve));
+  const { port } = server.address();
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/verify/github`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "octocat" }),
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.username, "octocat");
+  } finally {
+    global.fetch = originalFetch;
+    await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test("POST /api/verify/projects returns matched project evidence", async () => {
+  const originalFetch = global.fetch;
+
+  global.fetch = async (url, options = {}) => {
+    if (String(url).startsWith("http://127.0.0.1:")) {
+      return originalFetch(url, options);
+    }
+
+    if (String(url) === "https://api.github.com/users/octocat") {
+      return createJsonResponse(200, {
+        login: "octocat",
+        html_url: "https://github.com/octocat",
+        avatar_url: "https://avatars.githubusercontent.com/u/1?v=4",
+        name: "The Octocat",
+        bio: "Mascot",
+        company: "@github",
+        location: "San Francisco",
+        public_repos: 8,
+        public_gists: 8,
+        followers: 100,
+        following: 9,
+        created_at: "2011-01-25T18:44:36Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      });
+    }
+
+    if (String(url) === "https://api.github.com/users/octocat/repos?per_page=100&sort=updated") {
+      assert.equal(options.headers["User-Agent"], "resume-verifier");
+      return createJsonResponse(200, [
+        {
+          name: "portfolio-builder",
+          html_url: "https://github.com/octocat/portfolio-builder",
+          description: "Portfolio builder made with React and Node",
+          language: "JavaScript",
+          topics: ["react", "portfolio", "node"],
+          homepage: "https://portfolio-builder.example.com",
+          updated_at: "2026-04-01T10:00:00Z",
+          stargazers_count: 12,
+        },
+      ]);
+    }
+
+    if (String(url) === "https://api.github.com/repos/octocat/portfolio-builder/contents") {
+      return createJsonResponse(200, [
+        { type: "file", name: "README.md", path: "README.md" },
+        { type: "file", name: "package.json", path: "package.json" },
+      ]);
+    }
+
+    if (String(url) === "https://api.github.com/repos/octocat/portfolio-builder/contents/README.md") {
+      return createJsonResponse(200, {
+        content: Buffer.from("Portfolio Builder built with React and Node", "utf8").toString("base64"),
+      });
+    }
+
+    if (String(url) === "https://api.github.com/repos/octocat/portfolio-builder/contents/package.json") {
+      return createJsonResponse(200, {
+        content: Buffer.from(
+          JSON.stringify({
+            dependencies: { react: "^19.0.0", express: "^5.0.0" },
+            scripts: { dev: "vite", start: "node server.js" },
+          }),
+          "utf8",
+        ).toString("base64"),
+      });
+    }
+
+    if (String(url) === "https://portfolio-builder.example.com") {
+      return { ok: true, status: 200, url: "https://portfolio-builder.example.com" };
+    }
+
+    throw new Error(`Unexpected fetch call: ${url}`);
+  };
+
+  const server = app.listen(0);
+  await new Promise((resolve) => server.once("listening", resolve));
+  const { port } = server.address();
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/verify/projects`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: "octocat",
+        resumeProjects: [
+          {
+            name: "Portfolio Builder",
+            description: "Full stack portfolio generator",
+            technologies: ["React", "Node.js"],
+          },
+        ],
+        useGemini: false,
+      }),
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.matchedProjects.length, 1);
+    assert.equal(body.matchedProjects[0].repo.name, "portfolio-builder");
+    assert.equal(body.geminiAnalysis.used, false);
+  } finally {
+    global.fetch = originalFetch;
+    await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
 });
