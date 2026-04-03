@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const verifyGithubRouter = require("./routes/verifyGithub");
+const analyzeRouter = require("./routes/analyze");
 
 const app = express();
 
@@ -15,6 +16,7 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/api/verify", verifyGithubRouter);
+app.use("/api/analyze-resume", analyzeRouter);
 
 app.use((req, res) => {
   res.status(404).json({
