@@ -2,8 +2,8 @@ const express = require("express");
 const {
   extractGithubUsername,
   verifyGithubProfile,
-} = require("../services/githubVerifier");
-const { verifyGithubProjects } = require("../services/projectVerifier");
+  verifyGithubProjects,
+} = require("../services/githubverifyservice");
 
 const router = express.Router();
 
