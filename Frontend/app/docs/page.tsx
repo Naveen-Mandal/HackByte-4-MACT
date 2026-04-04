@@ -1,4 +1,4 @@
-import DocsClient from "./docs-client";
+import DocsClient from "./DocsClient";
 
 export const metadata = {
   title: "VerifAI API Docs — Resume Fraud Detection as a Service",
