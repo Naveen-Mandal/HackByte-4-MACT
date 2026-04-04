@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-50: #f4f6f8;
+  --color-brand-100: #e4e7ec;
+  --color-brand-200: #cfd4dc;
+  --color-brand-300: #aeb8c4;
+  --color-brand-400: #8896a6;
+  --color-brand-500: #67788a;
+  --color-brand-600: #526071;
+  --color-brand-700: #434e5d;
+  --color-brand-800: #002d72; /* The core Command Blue */
+  --color-brand-900: #001a48;
+  --color-brand-950: #000c24;
+
+  --color-surface-base: var(--surface-base);
+  --color-surface-dim: var(--surface-dim);
+  --color-surface-floating: var(--surface-floating);
+  
+  --color-on-surface: var(--on-surface);
+  --color-on-surface-muted: var(--on-surface-muted);
+
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+}
+
+:root {
+  --surface-base: #f8f9fa;
+  --surface-dim: #f3f4f5;
+  --surface-floating: #ffffff;
+  
+  --on-surface: #191c1d;
+  --on-surface-muted: #586579;
+}
+
+.dark {
+  --surface-base: #060e20;
+  --surface-dim: #091328;
+  --surface-floating: #192540;
+  
+  --on-surface: #dee5ff;
+  --on-surface-muted: #a3aac4;
+}
+
+body {
+  background-color: var(--surface-base);
+  color: var(--on-surface);
+  font-family: var(--font-body), sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display), sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.glass-panel {
+  background: color-mix(in srgb, var(--surface-floating) 70%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid color-mix(in srgb, var(--on-surface) 10%, transparent);
+  box-shadow: 0px 12px 32px rgba(0, 0, 0, 0.04);
+}
+
+.dark .glass-panel {
+  box-shadow: 0px 12px 32px rgba(0, 0, 0, 0.3);
+}
+
+.ambient-shadow {
+  box-shadow: 0px 12px 32px rgba(25, 28, 29, 0.06);
+}
+
+.dark .ambient-shadow {
+  box-shadow: 0px 12px 32px rgba(0, 0, 0, 0.4);
+}

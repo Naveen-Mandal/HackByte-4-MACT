@@ -12,17 +12,6 @@ A website where recruiters upload a candidate's resume PDF and get a comprehensi
 
 ---
 
-## Sponsor Tracks
-
-| Track | Prize | Integration |
-|-------|-------|-------------|
-| HackByte Main | $390 / $279 / $167 | Core project |
-| Google Gemini | Swag Kit | Core AI engine for all verification |
-| MongoDB Atlas | IoT Starter Kit | Store resume data and verification results |
-| Vultr | Portable Projectors | Deploy backend |
-
----
-
 ## Architecture
 
 ```text
@@ -62,7 +51,7 @@ A website where recruiters upload a candidate's resume PDF and get a comprehensi
             │
             ▼
 ┌─────────────────────┐
-│   Vultr VPS          │
+│   Render             │
 │   Deploy backend     │
 │   + serve frontend   │
 └─────────────────────┘
@@ -73,7 +62,7 @@ A website where recruiters upload a candidate's resume PDF and get a comprehensi
 ## Feature Spec
 
 ### 1. Resume Upload & Parse
-- Accept PDF upload via `pdf-parse` or `pdfjs-dist`
+- Accept PDF upload via `pdf-parse-new` or `pdfjs-dist`
 - Send extracted text to Gemini with structured extraction prompt
 - Extract: name, email, skills[], projects[], internships[], education[], coding_profiles{}, github_username
 
@@ -169,7 +158,7 @@ GET /repos/{username}/{repo_name}
 | Frontend | React + Vite + TailwindCSS | Fast setup, team knows React |
 | Backend | Node.js + Express | JS everywhere |
 | AI | Google Gemini API (gemini-2.0-flash) | Free tier, fast, multimodal |
-| PDF Parsing | pdf-parse (npm) | Simple, works |
+| PDF Parsing | pdf-parse-new (npm) | Simple, works |
 | GitHub | Octokit (npm) | Official GitHub API client |
 | Coding Profiles | Axios + Cheerio | HTTP requests + HTML scraping |
 | Database | MongoDB Atlas | Free tier, stores everything |
@@ -233,7 +222,7 @@ GET /repos/{username}/{repo_name}
 - [ ] Initialize React + Vite project with Tailwind
 - [ ] Set up Node.js + Express backend with routes skeleton
 - [ ] MongoDB Atlas cluster + connection
-- [ ] Resume PDF upload → pdf-parse → text extraction working
+- [ ] Resume PDF upload → pdf-parse-new → text extraction working
 - [ ] First Gemini API call working (extract resume data as JSON)
 
 ### Hours 10–20: Core Verification Engine
@@ -297,7 +286,7 @@ BACKEND (Node.js + Express):
 
 POST /api/upload-resume
 - Accept PDF via multer
-- Extract text with pdf-parse
+- Extract text with pdf-parse-new
 - Call Gemini API with prompt: "Extract from this resume as JSON: name, email, skills (array), projects (array with name, description, technologies, github_url), internships (array), education (array), coding_profiles (object with leetcode, codeforces, codechef usernames if found), github_username. Return ONLY valid JSON."
 - Store in MongoDB candidates collection
 - Return candidate_id

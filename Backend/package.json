@@ -1,0 +1,29 @@
+{
+  "name": "github-profile-verifier",
+  "version": "1.0.0",
+  "description": "Express service for verifying GitHub profiles in a resume verifier workflow.",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "npx jest"
+  },
+  "keywords": [
+    "express",
+    "github",
+    "resume-verifier"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "cheerio": "^1.2.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.0",
+    "express": "^5.2.1",
+    "multer": "^2.1.1",
+    "pdf-parse": "^2.4.5",
+    "pdf-parse-new": "^2.0.0",
+    "unpdf": "^1.4.0"
+  }
+}
