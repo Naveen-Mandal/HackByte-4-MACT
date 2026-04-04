@@ -1,10 +1,13 @@
-import pdf from "pdf-parse-new";
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const pdfParse = require("pdf-parse");
 
 async function extractTextFromPdf(buffer) {
   try {
-    const data = await pdf(buffer);
+    const data = await pdfParse(buffer);
     return data.text;
   } catch (error) {
+    console.error("pdf parsing error (pdf-parse):", error);
     const parseError = new Error("Failed to parse PDF document.");
     parseError.statusCode = 400;
     throw parseError;

@@ -77,7 +77,9 @@ async function analyzeResumePipeline(pdfBuffer) {
              projectsForGithub = extractedData.projects.map(p => ({
                  name: p.name,
                  description: p.description,
-                 technologies: p.technologies || []
+                 technologies: p.technologies || [],
+                 githubLink: p.githubLink || "",
+                 claimedPoints: p.claimedPoints || []
              }));
         }
 
@@ -89,16 +91,35 @@ async function analyzeResumePipeline(pdfBuffer) {
              });
              
              githubAnalytics.profile = githubResult.githubProfile || null;
+             let parsedGeminiAnalysis = null;
+             if (githubResult.geminiAnalysis?.used && githubResult.geminiAnalysis.raw) {
+                 try {
+                     const rawText = githubResult.geminiAnalysis.raw.replace(/```json\n?|\n?```/g, '').trim();
+                     parsedGeminiAnalysis = JSON.parse(rawText);
+                 } catch (e) {
+                     console.warn("Failed to parse Gemini analysis JSON:", e.message);
+                 }
+             }
+
              // Decorate matches with Commit and Collaborator analysis
              if (githubResult.matchedProjects) {
                  for (let match of githubResult.matchedProjects) {
                      const commitAndCollab = await analyzeCommitsAndContributors(githubUsername, match.repo.name);
+                     
+                     let matchAssessment = null;
+                     if (parsedGeminiAnalysis && Array.isArray(parsedGeminiAnalysis.projectAssessments)) {
+                         matchAssessment = parsedGeminiAnalysis.projectAssessments.find(
+                             a => a.resumeProject === match.resumeProject.name || a.matchedRepo === match.repo.name
+                         );
+                     }
+
                      githubAnalytics.matches.push({
                          project: match.resumeProject.name,
                          repo: match.repo.name,
                          matchScore: match.matchScore,
                          deploymentChecked: match.deploymentCheck ? match.deploymentCheck.working : false,
                          commits: commitAndCollab,
+                         assessment: matchAssessment || null,
                          codeVerification: githubResult.geminiAnalysis?.used ? "Evaluated (See full payload for details)" : "Disabled"
                      });
                  }

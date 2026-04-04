@@ -27,24 +27,16 @@ const NAV_SECTIONS = [
     items: [
       { id: "github-verification", label: "GitHub Verification" },
       { id: "coding-profiles", label: "Coding Profiles" },
+      { id: "leetcode-verify", label: "POST /verify/leetcode" },
+      { id: "codeforces-verify", label: "POST /verify/codeforces" },
+      { id: "codechef-verify", label: "POST /verify/codechef" },
       { id: "ats-scoring", label: "ATS Scoring" },
       { id: "skill-decay", label: "Skill Continuity" },
     ],
   },
   {
-    label: "Integrations",
+    label: "Examples",
     items: [
-      { id: "greenhouse", label: "Greenhouse ATS" },
-      { id: "lever", label: "Lever" },
-      { id: "workday", label: "Workday" },
-      { id: "zapier", label: "Zapier / Make" },
-    ],
-  },
-  {
-    label: "SDKs & Examples",
-    items: [
-      { id: "node-sdk", label: "Node.js" },
-      { id: "python-sdk", label: "Python" },
       { id: "curl-examples", label: "cURL" },
     ],
   },
@@ -164,109 +156,6 @@ const CURL_EXAMPLE = `curl -X POST https://api.verifai.dev/v1/analyze-resume \\
   -H "Content-Type: multipart/form-data" \\
   -F "resume=@./john_doe_resume.pdf"`;
 
-const NODE_EXAMPLE = `import VerifAI from "@verifai/node";
-import fs from "fs";
-
-const client = new VerifAI({ apiKey: process.env.VERIFAI_API_KEY });
-
-async function checkCandidate(resumePath) {
-  const file = fs.createReadStream(resumePath);
-
-  const report = await client.resume.analyze({ file });
-
-  console.log("Candidate:", report.candidate.name);
-  console.log("ATS Score:", report.atsAnalysis.atsScore);
-  console.log(
-    "GitHub Projects Verified:",
-    report.githubAnalytics.matches.length
-  );
-
-  if (report.codingProfilesVerification.results.leetcode?.mismatches?.length) {
-    console.warn("⚠ LeetCode claims disputed:", 
-      report.codingProfilesVerification.results.leetcode.mismatches
-    );
-  }
-
-  return report;
-}
-
-checkCandidate("./jane_smith_resume.pdf");`;
-
-const PYTHON_EXAMPLE = `import verifai
-import os
-
-client = verifai.Client(api_key=os.environ["VERIFAI_API_KEY"])
-
-with open("candidate_resume.pdf", "rb") as f:
-    report = client.resume.analyze(file=f)
-
-print(f"Candidate: {report.candidate['name']}")
-print(f"ATS Score: {report.ats_analysis['atsScore']}/100")
-
-# Check for inflated coding profile claims
-lc = report.coding_profiles_verification["results"].get("leetcode")
-if lc and lc.get("mismatches"):
-    print("LeetCode fraud detected:")
-    for mismatch in lc["mismatches"]:
-        print(f"  • {mismatch}")
-
-# GitHub project verification
-for match in report.github_analytics["matches"]:
-    print(f"  Repo: {match['repo']} | Match: {match['matchScore']}%")`;
-
-const GREENHOUSE_EXAMPLE = `// greenhouse-webhook.js  — called for every new application
-import express from "express";
-import VerifAI from "@verifai/node";
-
-const app = express();
-const verifai = new VerifAI({ apiKey: process.env.VERIFAI_API_KEY });
-
-app.post("/webhooks/greenhouse/new-application", async (req, res) => {
-  const { application_id, resume_url } = req.body;
-
-  // Fetch the resume PDF from Greenhouse's CDN
-  const pdfRes = await fetch(resume_url);
-  const pdfBlob = await pdfRes.blob();
-
-  // Run VerifAI's full verification pipeline
-  const report = await verifai.resume.analyze({ file: pdfBlob });
-
-  // Tag the candidate in Greenhouse based on fraud confidence
-  const flagged = 
-    report.githubAnalytics.matches.some(m => m.matchScore < 40) ||
-    report.codingProfilesVerification.results?.leetcode?.mismatches?.length > 0;
-
-  await greenhouse.applications.addTag(application_id, {
-    tag: flagged ? "verifai:suspicious" : "verifai:verified",
-  });
-
-  res.json({ ok: true, flagged, report });
-});`;
-
-const LEVER_EXAMPLE = `// lever-integration.js
-import VerifAI from "@verifai/node";
-
-const verifai = new VerifAI({ apiKey: process.env.VERIFAI_API_KEY });
-
-// Lever Opportunity webhook handler
-export async function onOpportunityCreated(opportunity) {
-  const resumeBuffer = await lever.fetchResumeBuffer(opportunity.id);
-
-  const report = await verifai.resume.analyze({ 
-    file: new Blob([resumeBuffer], { type: "application/pdf" }) 
-  });
-
-  // Attach the report as a note on the Lever candidate profile
-  await lever.notes.create(opportunity.id, {
-    value: \`## VerifAI Verification Report
-**ATS Score:** \${report.atsAnalysis.atsScore}/100
-**GitHub Projects Verified:** \${report.githubAnalytics.matches.length}
-**Final AI Review:**
-\${report.finalAutomatedReview}\`,
-    secret: false,
-  });
-}`;
-
 const RESPONSE_EXAMPLE = `{
   "success": true,
   "data": {
@@ -274,7 +163,13 @@ const RESPONSE_EXAMPLE = `{
       "contactInfo": { "name": "Jane Smith", "email": "jane@example.com" },
       "skills": ["TypeScript", "React", "Python", "PostgreSQL"],
       "projects": [
-        { "name": "OpenCart Plugin", "description": "E-commerce extension", "technologies": ["PHP", "MySQL"] }
+        {
+          "name": "SecureShop",
+          "description": "Implemented authentication using JWT and role-based route protection",
+          "technologies": ["Node.js", "Express", "MongoDB"],
+          "githubLink": "https://github.com/janesmith/secureshop",
+          "claimedPoints": ["Implemented authentication using JWT", "Protected admin routes with role checks"]
+        }
       ],
       "githubProfile": "https://github.com/janesmith",
       "codingProfiles": {
@@ -294,11 +189,24 @@ const RESPONSE_EXAMPLE = `{
         "profile": { "username": "janesmith", "publicRepos": 43, "followers": 120 },
         "matches": [
           {
-            "project": "OpenCart Plugin",
-            "repo": "opencart-plugin",
-            "matchScore": 91,
+            "project": "SecureShop",
+            "repo": "secureshop",
+            "matchScore": 100,
             "deploymentChecked": true,
-            "commits": { "totalCommits": 87, "isSoleContributor": true }
+            "commits": { "totalCommits": 87, "isSoleContributor": true },
+            "assessment": {
+              "resumeProject": "SecureShop",
+              "matchedRepo": "secureshop",
+              "claimsVerification": [
+                {
+                  "claim": "Implemented authentication using JWT",
+                  "status": "accepted",
+                  "actualContent": "Repo-wide code search found jwt-related matches and fetched surrounding code snippets from auth middleware and token generation files."
+                }
+              ],
+              "verdict": "Strong evidence that the claimed JWT authentication feature was implemented."
+            },
+            "codeVerification": "Evaluated (See full payload for details)"
           }
         ]
       },
@@ -435,7 +343,7 @@ export default function DocsClient() {
             <Section id="introduction" title="Introduction">
               <p className="docs-prose">
                 VerifAI is a resume intelligence API designed for modern
-                recruiting pipelines. Submit a candidate's PDF resume and receive
+                recruiting pipelines. Submit a candidate&apos;s PDF resume and receive
                 a deep verification report in seconds — no scraping, no manual
                 checking.
               </p>
@@ -463,7 +371,7 @@ export default function DocsClient() {
                 </li>
                 <li>
                   <strong>Skill Continuity</strong> — Identifies skills that
-                  haven't appeared in recent commits (skill decay).
+                  haven&apos;t appeared in recent commits (skill decay).
                 </li>
                 <li>
                   <strong>AI Final Review</strong> — Synthesises all signals into
@@ -607,7 +515,7 @@ export default function DocsClient() {
                 <ResponseField
                   name="data.verificationReport.githubAnalytics"
                   type="object"
-                  description="GitHub profile stats and an array of matched project objects with matchScore, deploymentChecked, and commit analytics."
+                  description="GitHub profile stats and matched project objects with repo match score, deployment status, commit analytics, and optional AI claim assessments derived from repo-wide code snippets."
                 />
                 <ResponseField
                   name="data.verificationReport.codingProfilesVerification"
@@ -666,26 +574,50 @@ export default function DocsClient() {
             <Section id="github-verification" title="GitHub Verification">
               <p className="docs-prose">
                 VerifAI automatically detects GitHub profile URLs from the resume
-                text and from hidden PDF hyperlink annotations. It then:
+                text and from hidden PDF hyperlink annotations. For each extracted
+                project, it matches the most likely repository and then verifies
+                the claimed implementation details using repo-wide evidence.
               </p>
               <ul className="docs-list">
                 <li>
-                  Fetches the public repository list and matches projects by name
-                  similarity and technology stack overlap.
+                  Fetches the public repository list and matches projects by
+                  exact GitHub link first, then falls back to name similarity,
+                  repo description overlap, topics, and technology keywords.
                 </li>
                 <li>
-                  Analyses commit history to flag repos where the candidate is not
-                  a meaningful contributor (e.g. they{" "}
-                  <em>claimed</em> authorship of a fork they never touched).
+                  Extracts keywords from the project description and
+                  <code className="docs-inline-code"> claimedPoints </code>
+                  such as <code className="docs-inline-code">JWT</code>,
+                  <code className="docs-inline-code"> OAuth </code>, or
+                  <code className="docs-inline-code"> Redis </code>.
                 </li>
                 <li>
-                  Probes live deployment URLs listed in repo metadata to verify
-                  projects are actually running.
+                  Runs repo-wide GitHub code search for those keywords, fetches
+                  the actual matched files, and extracts surrounding code windows
+                  with line ranges instead of relying only on README metadata.
                 </li>
                 <li>
-                  Checks Gemini-evaluated code quality for matched repositories.
+                  Sends the claim plus those code snippets to Gemini so each
+                  claim can be marked as <code className="docs-inline-code">accepted</code>,
+                  <code className="docs-inline-code"> missing </code>, or
+                  <code className="docs-inline-code"> contradicted </code>.
+                </li>
+                <li>
+                  Analyses commit history to flag repos where the candidate is
+                  not a meaningful contributor and probes live deployment URLs
+                  listed in repo metadata when available.
                 </li>
               </ul>
+              <Callout type="tip">
+                Example: if a resume says{" "}
+                <code className="docs-inline-code">
+                  Implemented authentication using JWT
+                </code>
+                , VerifAI extracts <code className="docs-inline-code">jwt</code>,
+                searches the full matched repository, pulls nearby auth code, and
+                uses that evidence to decide whether the claim is actually
+                supported.
+              </Callout>
               <Callout type="info">
                 Only <strong>public</strong> repositories are analysed. Private
                 repo support via GitHub OAuth is on the roadmap.
@@ -744,6 +676,58 @@ export default function DocsClient() {
               </div>
             </Section>
 
+            {/* ── LeetCode Verification ─────────────────────────────────── */}
+            <Section id="leetcode-verify" title="POST /api/verify/leetcode">
+              <div className="docs-endpoint-bar">
+                <Tag color="post">POST</Tag>
+                <code className="docs-endpoint-path">/api/verify/leetcode</code>
+              </div>
+              <p className="docs-prose">
+                Verify a candidate's LeetCode profile specifically to check for rating inflation and 
+                discrepancies in solved problem counts.
+              </p>
+              <h3 className="docs-h3">Request Body</h3>
+              <div className="docs-fields">
+                <ResponseField name="username" type="string" required description="The candidate's LeetCode username." />
+                <ResponseField name="totalSolved" type="number" description="Claimed total solved problems." />
+                <ResponseField name="currentRating" type="number" description="Claimed current LeetCode rating." />
+              </div>
+            </Section>
+
+            {/* ── Codeforces Verification ───────────────────────────────── */}
+            <Section id="codeforces-verify" title="POST /api/verify/codeforces">
+              <div className="docs-endpoint-bar">
+                <Tag color="post">POST</Tag>
+                <code className="docs-endpoint-path">/api/verify/codeforces</code>
+              </div>
+              <p className="docs-prose">
+                Verify a candidate&apos;s Codeforces rank, max rating, and rating gaps against the live API.
+              </p>
+              <h3 className="docs-h3">Request Body</h3>
+              <div className="docs-fields">
+                <ResponseField name="username" type="string" required description="The candidate's Codeforces username." />
+                <ResponseField name="rating" type="number" description="Claimed current Codeforces rating." />
+                <ResponseField name="maxRating" type="number" description="Claimed maximum Codeforces rating." />
+              </div>
+            </Section>
+
+            {/* ── CodeChef Verification ─────────────────────────────────── */}
+            <Section id="codechef-verify" title="POST /api/verify/codechef">
+              <div className="docs-endpoint-bar">
+                <Tag color="post">POST</Tag>
+                <code className="docs-endpoint-path">/api/verify/codechef</code>
+              </div>
+              <p className="docs-prose">
+                Verify a candidate&apos;s CodeChef stars, rating, and global rank.
+              </p>
+              <h3 className="docs-h3">Request Body</h3>
+              <div className="docs-fields">
+                <ResponseField name="username" type="string" required description="The candidate's CodeChef username." />
+                <ResponseField name="currentRating" type="number" description="Claimed current CodeChef rating." />
+                <ResponseField name="stars" type="number" description="Claimed CodeChef stars (1-7)." />
+              </div>
+            </Section>
+
             {/* ── ATS Scoring ───────────────────────────────────────────── */}
             <Section id="ats-scoring" title="ATS Scoring">
               <p className="docs-prose">
@@ -772,7 +756,7 @@ export default function DocsClient() {
               <p className="docs-prose">
                 The <code className="docs-inline-code">skillDecay</code> array
                 cross-references every skill listed on the resume with the
-                candidate's GitHub commit history to find the last date each skill
+                candidate&apos;s GitHub commit history to find the last date each skill
                 appeared in a commit diff.
               </p>
               <p className="docs-prose">
@@ -788,99 +772,6 @@ export default function DocsClient() {
             </Section>
 
             {/* ── Greenhouse ────────────────────────────────────────────── */}
-            <Section id="greenhouse" title="Greenhouse ATS Integration">
-              <p className="docs-prose">
-                Receive a Greenhouse webhook on every new application, call
-                VerifAI, and write the result back as a candidate tag and note.
-              </p>
-              <CodeBlock
-                lang="js"
-                filename="greenhouse-webhook.js"
-                code={GREENHOUSE_EXAMPLE}
-              />
-              <Callout type="info">
-                Set <code className="docs-inline-code">GREENHOUSE_API_KEY</code>{" "}
-                and <code className="docs-inline-code">VERIFAI_API_KEY</code> in
-                your environment. The webhook URL must be added in{" "}
-                <strong>Greenhouse Configure → Dev Center → Web Hooks</strong>.
-              </Callout>
-            </Section>
-
-            {/* ── Lever ─────────────────────────────────────────────────── */}
-            <Section id="lever" title="Lever Integration">
-              <p className="docs-prose">
-                Attach a VerifAI verification note to every new Lever opportunity
-                automatically.
-              </p>
-              <CodeBlock
-                lang="js"
-                filename="lever-integration.js"
-                code={LEVER_EXAMPLE}
-              />
-            </Section>
-
-            {/* ── Workday ───────────────────────────────────────────────── */}
-            <Section id="workday" title="Workday Integration">
-              <p className="docs-prose">
-                Workday supports outbound integrations via Workday Studio or
-                Integration Cloud. Use the REST step to POST resumes to VerifAI
-                and map the response fields back to custom candidate attributes.
-              </p>
-              <Callout type="info">
-                A pre-built Workday Studio package is available on request.
-                Contact{" "}
-                <a href="mailto:integrations@verifai.dev" className="docs-inline-link">
-                  integrations@verifai.dev
-                </a>
-                .
-              </Callout>
-            </Section>
-
-            {/* ── Zapier ────────────────────────────────────────────────── */}
-            <Section id="zapier" title="Zapier / Make (no-code)">
-              <p className="docs-prose">
-                For teams that don't want to write code, the VerifAI Zapier app
-                and Make module let you connect any ATS in minutes:
-              </p>
-              <ol className="docs-list docs-list--ordered">
-                <li>
-                  Trigger: <em>New Application</em> from your ATS (Greenhouse,
-                  Workable, Breezy HR, etc.)
-                </li>
-                <li>Action: <em>Upload Resume to VerifAI</em></li>
-                <li>
-                  Action: <em>Add Tag / Update Candidate Field</em> based on the
-                  <code className="docs-inline-code">finalAutomatedReview</code>{" "}
-                  and fraud signal flags.
-                </li>
-              </ol>
-            </Section>
-
-            {/* ── Node SDK ──────────────────────────────────────────────── */}
-            <Section id="node-sdk" title="Node.js SDK">
-              <CodeBlock
-                lang="bash"
-                filename="Install"
-                code={`npm install @verifai/node`}
-              />
-              <CodeBlock
-                lang="js"
-                filename="Usage — analyze-resume.js"
-                code={NODE_EXAMPLE}
-              />
-            </Section>
-
-            {/* ── Python SDK ────────────────────────────────────────────── */}
-            <Section id="python-sdk" title="Python SDK">
-              <CodeBlock lang="bash" filename="Install" code={`pip install verifai`} />
-              <CodeBlock
-                lang="python"
-                filename="Usage — analyze_resume.py"
-                code={PYTHON_EXAMPLE}
-              />
-            </Section>
-
-            {/* ── cURL ──────────────────────────────────────────────────── */}
             <Section id="curl-examples" title="cURL Examples">
               <h3 className="docs-h3">Analyze a resume</h3>
               <CodeBlock lang="bash" filename="cURL" code={CURL_EXAMPLE} />

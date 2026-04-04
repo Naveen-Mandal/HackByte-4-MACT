@@ -71,6 +71,12 @@ const TECHNOLOGY_PATTERNS = [
   "jwt",
 ];
 
+const MAX_CODE_SEARCH_KEYWORDS = 6;
+const MAX_CODE_SEARCH_RESULTS_PER_KEYWORD = 5;
+const MAX_FILES_TO_INSPECT = 10;
+const MAX_SNIPPETS_PER_FILE = 3;
+const MAX_FILE_CONTENT_CHARS = 120000;
+
 function normalizeWhitespace(value) {
   return value.replace(/\s+/g, " ").trim();
 }
@@ -157,9 +163,9 @@ function extractGithubUsername(value) {
   }
 }
 
-function buildGithubHeaders() {
+function buildGithubHeaders(includeTextMatch = false) {
   const headers = {
-    Accept: "application/vnd.github+json",
+    Accept: includeTextMatch ? "application/vnd.github.text-match+json" : "application/vnd.github+json",
     "User-Agent": "resume-verifier",
   };
 
@@ -226,8 +232,12 @@ function normalizeProject(project) {
 
   const name = normalizeWhitespace(String(project.name || ""));
   const description = normalizeWhitespace(String(project.description || ""));
+  const githubLink = normalizeWhitespace(String(project.githubLink || ""));     
   const technologies = Array.isArray(project.technologies)
     ? project.technologies.map((value) => normalizeWhitespace(String(value))).filter(Boolean)
+    : [];
+  const claimedPoints = Array.isArray(project.claimedPoints)
+    ? project.claimedPoints.map((value) => normalizeWhitespace(String(value))).filter(Boolean)
     : [];
 
   if (!name && !description) {
@@ -237,7 +247,9 @@ function normalizeProject(project) {
   return {
     name: name || description.split(" ").slice(0, 4).join(" "),
     description,
+    githubLink,
     technologies,
+    claimedPoints,
     keywords: toKeywords([name, description, technologies.join(" ")]),
     source: "structured",
   };
@@ -265,7 +277,9 @@ function parseProjectLine(line) {
   return {
     name,
     description,
+    githubLink: "",
     technologies: [],
+    claimedPoints: [],
     keywords: toKeywords([name, description]),
     source: "resumeText",
   };
@@ -438,6 +452,16 @@ async function fetchGithubRepos(username) {
   });
 }
 
+async function fetchSingleRepo(owner, repo) {
+  try {
+    return await fetchJson(`${GITHUB_API_BASE_URL}/repos/${owner}/${repo}`, {
+      headers: buildGithubHeaders(),
+    });
+  } catch (error) {
+    return null;
+  }
+}
+
 async function fetchRepoContents(owner, repo, path = "") {
   const encodedPath = path ? `/${path}` : "";
   return fetchJson(`${GITHUB_API_BASE_URL}/repos/${owner}/${repo}/contents${encodedPath}`, {
@@ -447,6 +471,16 @@ async function fetchRepoContents(owner, repo, path = "") {
 
 function decodeGithubContent(content) {
   return Buffer.from(content, "base64").toString("utf8");
+}
+
+async function fetchRepoFileContent(owner, repo, path) {
+  const file = await fetchRepoContents(owner, repo, path);
+
+  if (!file?.content || Array.isArray(file)) {
+    return null;
+  }
+
+  return decodeGithubContent(file.content);
 }
 
 async function collectImportantFileSummaries(owner, repo) {
@@ -478,6 +512,123 @@ async function collectImportantFileSummaries(owner, repo) {
   }
 
   return summaries;
+}
+
+async function searchRepoForImplementationDetails(owner, repo, projectKeywords) {
+  if (!projectKeywords || projectKeywords.length === 0) {
+    return [];
+  }
+
+  const candidateKeywords = projectKeywords
+    .filter((k) => k.length > 2)
+    .filter((k, i, arr) => arr.indexOf(k) === i)
+    .slice(0, MAX_CODE_SEARCH_KEYWORDS);
+
+  if (candidateKeywords.length === 0) {
+    return [];
+  }
+
+  const fileMatches = new Map();
+
+  for (const keyword of candidateKeywords) {
+    const url = `${GITHUB_API_BASE_URL}/search/code?q=${encodeURIComponent(`"${keyword}"`)}+repo:${owner}/${repo}&per_page=${MAX_CODE_SEARCH_RESULTS_PER_KEYWORD}`;
+
+    try {
+      const data = await fetchJson(url, { headers: buildGithubHeaders(true) });
+      const items = Array.isArray(data.items) ? data.items : [];
+
+      for (const item of items) {
+        if (!item?.path) {
+          continue;
+        }
+
+        const existing = fileMatches.get(item.path) || {
+          fileName: item.path,
+          matchedKeywords: new Set(),
+          textMatches: [],
+        };
+
+        existing.matchedKeywords.add(keyword);
+        existing.textMatches.push(
+          ...(item.text_matches || [])
+            .map((match) => match.fragment || "")
+            .filter(Boolean)
+            .slice(0, 2),
+        );
+
+        fileMatches.set(item.path, existing);
+      }
+    } catch {
+      // Ignore individual keyword search failures so one query does not block the repo analysis.
+    }
+  }
+
+  if (fileMatches.size === 0) {
+    return [];
+  }
+
+  const implementationDetails = [];
+
+  for (const fileMatch of [...fileMatches.values()].slice(0, MAX_FILES_TO_INSPECT)) {
+    try {
+      const content = await fetchRepoFileContent(owner, repo, fileMatch.fileName);
+
+      if (!content || content.length > MAX_FILE_CONTENT_CHARS || content.includes("\u0000")) {
+        continue;
+      }
+
+      implementationDetails.push({
+        fileName: fileMatch.fileName,
+        matchedKeywords: [...fileMatch.matchedKeywords],
+        snippets: extractCodeSnippetsForKeywords(content, [...fileMatch.matchedKeywords]).slice(0, MAX_SNIPPETS_PER_FILE),
+        searchFragments: [...new Set(fileMatch.textMatches)].slice(0, 3),
+      });
+    } catch {
+      // Ignore file-level failures so a single unreadable file does not fail verification.
+    }
+  }
+
+  return implementationDetails.filter((item) => item.snippets.length > 0 || item.searchFragments.length > 0);
+}
+
+function extractCodeSnippetsForKeywords(content, keywords) {
+  const lines = content.split(/\r?\n/);
+  const snippets = [];
+  const seenRanges = new Set();
+
+  for (const keyword of keywords) {
+    const loweredKeyword = keyword.toLowerCase();
+
+    for (let index = 0; index < lines.length; index += 1) {
+      if (!lines[index].toLowerCase().includes(loweredKeyword)) {
+        continue;
+      }
+
+      const start = Math.max(0, index - 4);
+      const end = Math.min(lines.length - 1, index + 6);
+      const rangeKey = `${start}:${end}`;
+
+      if (seenRanges.has(rangeKey)) {
+        continue;
+      }
+
+      seenRanges.add(rangeKey);
+      snippets.push({
+        keyword,
+        lineStart: start + 1,
+        lineEnd: end + 1,
+        snippet: lines.slice(start, end + 1).join("\n").slice(0, 2500),
+      });
+
+      if (snippets.length >= MAX_SNIPPETS_PER_FILE) {
+        return snippets;
+      }
+
+      break;
+    }
+  }
+
+  return snippets;
 }
 
 async function checkDeployment(url) {
@@ -528,14 +679,21 @@ function buildGeminiPrompt({ githubProfile, resumeProjects, projectMatches }) {
         deploymentCheck: match.deploymentCheck,
       },
       importantFiles: match.importantFiles,
+      implementationDetails: match.implementationDetails,
     })),
   };
 
   return [
     "You are verifying whether resume projects appear to be real and working based on GitHub evidence.",
+    "Pay special attention to 'implementationDetails' which contains repo-wide code search hits plus surrounding code snippets fetched from matched files.",
+    "A claim should be marked 'accepted' only when the snippets materially support that the feature was actually implemented, not merely mentioned in a dependency list or README.",
     "Use only the supplied compact evidence.",
     "Return JSON with keys: overallVerdict, confidence, summary, projectAssessments.",
-    "Each projectAssessments item must include: resumeProject, matchedRepo, verdict, confidence, reasons, workingDemoLikelihood.",
+    "Each projectAssessments item must include:",
+    "- resumeProject (string)",
+    "- matchedRepo (string)",
+    "- claimsVerification (array of objects with keys: claim (string, e.g. 'Used JWT for auth'), status ('accepted', 'missing', 'contradicted'), actualContent (string, e.g. 'Found jsonwebtoken in package.json and implementation details'))",
+    "- verdict (string)",
     JSON.stringify(compactPayload),
   ].join("\n");
 }
@@ -614,28 +772,76 @@ async function verifyGithubProjects(input) {
     };
   }
 
-  const scoredMatches = resumeProjects
-    .map((project) => {
-      const bestRepo = repos
-        .map((repo) => ({
-          repo,
-          score: scoreProjectAgainstRepo(project, repo),
-        }))
-        .sort((left, right) => right.score - left.score)[0];
+  const scoredMatches = await Promise.all(
+    resumeProjects.map(async (project) => {
+      let matchedRepo = null;
+      let matchedScore = 0;
+      let usedProvidedLink = false;
+
+      // 1. Try to use provided GitHub URL
+      if (project.githubLink) {
+        const urlMatch = project.githubLink.match(/github\.com\/([^\/]+)\/([^\/]+)/i);
+        if (urlMatch) {
+          const owner = urlMatch[1];
+          const repoName = urlMatch[2].replace(/\.git$/, "");
+          const directRepo = await fetchSingleRepo(owner, repoName);
+          if (directRepo) {
+            matchedRepo = directRepo;
+            matchedScore = 100; // Perfect match since it's the exact link
+            usedProvidedLink = true;
+          }
+        }
+      }
+
+      // 2. Fallback to fuzzy search among user's repos
+      if (!matchedRepo) {
+        const bestRepo = repos
+          .map((repo) => ({
+            repo,
+            score: scoreProjectAgainstRepo(project, repo),
+          }))
+          .sort((left, right) => right.score - left.score)[0];
+        
+        if (bestRepo && bestRepo.score > 0) {
+          matchedRepo = bestRepo.repo;
+          matchedScore = bestRepo.score;
+        }
+      }
 
       return {
         resumeProject: project,
-        repo: bestRepo?.repo || null,
-        matchScore: bestRepo?.score || 0,
+        repo: matchedRepo,
+        matchScore: matchedScore,
+        usedProvidedLink
       };
     })
-    .filter((match) => match.repo && match.matchScore > 0);
+  );
+
+  const filteredMatches = scoredMatches.filter((match) => match.repo);
 
   const enrichedMatches = [];
 
-  for (const match of scoredMatches.slice(0, 5)) {
-    const importantFiles = await collectImportantFileSummaries(normalizedUsername, match.repo.name);
+  for (const match of filteredMatches.slice(0, 5)) {
+    const owner = match.repo.owner.login;
+    const repoName = match.repo.name;
+
+    const importantFiles = await collectImportantFileSummaries(owner, repoName);  
     const deploymentCheck = await checkDeployment(match.repo.homepage);
+    
+    // Convert claimed points to keywords and combine with explicitly mentioned tech
+    const searchTerms = [
+      ...match.resumeProject.keywords,
+      ...match.resumeProject.claimedPoints.map((claim) => toKeywords([claim])).flat()
+    ];
+
+    const implementationDetails = await searchRepoForImplementationDetails(     
+      owner,
+      repoName,
+      [...new Set(searchTerms)]
+    );
+
+    // Wait a brief moment to avoid hitting GitHub API secondary rate limits on code search
+    await new Promise((resolve) => setTimeout(resolve, 800));
 
     enrichedMatches.push({
       resumeProject: match.resumeProject,
@@ -652,6 +858,7 @@ async function verifyGithubProjects(input) {
       },
       deploymentCheck,
       importantFiles,
+      implementationDetails,
     });
   }
 
@@ -674,7 +881,7 @@ async function verifyGithubProjects(input) {
   };
 }
 
-export { 
+export  { 
   buildGeminiPrompt,
   extractGithubUsername,
   verifyGithubProfile,
