@@ -31,7 +31,7 @@ export default function UploadDashboard() {
       const formData = new FormData();
       formData.append("resume", file);
       
-      const extractRes = await fetch("http://127.0.0.1:4000/api/analyze-resume/extract", {
+      const extractRes = await fetch("http://65.20.88.66:4000/api/analyze-resume/extract", {
         method: "POST",
         body: formData,
       });
@@ -44,24 +44,24 @@ export default function UploadDashboard() {
       const ccData = extractJson?.data?.extractedData?.codingProfiles?.codechef;
 
       if (lcData?.username) {
-        fetch("http://127.0.0.1:4000/api/verify/leetcode", {
+        fetch("http://65.20.88.66:4000/api/verify/leetcode", {
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(lcData)
         }).then(r => r.json()).then(setLeetcodeData).catch(e => setLeetcodeData({ error: e.message }));
       }
       
       if (cfData?.username) {
-        fetch("http://127.0.0.1:4000/api/verify/codeforces", {
+        fetch("http://65.20.88.66:4000/api/verify/codeforces", {
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cfData)
         }).then(r => r.json()).then(setCodeforcesData).catch(e => setCodeforcesData({ error: e.message }));
       }
       
       if (ccData?.username) {
-        fetch("http://127.0.0.1:4000/api/verify/codechef", {
+        fetch("http://65.20.88.66:4000/api/verify/codechef", {
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(ccData)
         }).then(r => r.json()).then(setCodechefData).catch(e => setCodechefData({ error: e.message }));
       }
 
-      fetch("http://127.0.0.1:4000/api/analyze-resume", {
+      fetch("http://65.20.88.66:4000/api/analyze-resume", {
         method: "POST", body: formData,
       }).then(r => r.json()).then(setAnalyzeData).catch(e => setAnalyzeData({ error: e.message }));
 

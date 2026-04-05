@@ -3,7 +3,7 @@ import "dotenv/config";
 
 const port = Number(process.env.PORT) || 4000;
 
-app.listen(port, () => {
+app.listen(port, '0.0.0.0' , () => {
   console.log(`GitHub profile verifier listening on port ${port}`);
 });
 

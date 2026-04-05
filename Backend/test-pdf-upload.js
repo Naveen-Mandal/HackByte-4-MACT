@@ -9,7 +9,7 @@ async function testUpload() {
   formData.append("resume", new Blob([pdfContent], { type: "application/pdf" }), "test.pdf");
 
   try {
-    const response = await fetch("http://127.0.0.1:4000/api/analyze-resume", {
+    const response = await fetch("http://65.20.88.66:4000/api/analyze-resume", {
       method: "POST",
       body: formData,
     });
