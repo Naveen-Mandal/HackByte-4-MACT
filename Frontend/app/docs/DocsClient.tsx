@@ -151,8 +151,7 @@ function ResponseField({
 }
 
 // ─── Code samples ──────────────────────────────────────────────────────────────
-const CURL_EXAMPLE = `curl -X POST https://api.verifai.dev/v1/analyze-resume \\
-  -H "Authorization: Bearer YOUR_API_KEY" \\
+const CURL_EXAMPLE = `curl -X POST http://65.20.88.66:4000/api/analyze-resume \\
   -H "Content-Type: multipart/form-data" \\
   -F "resume=@./john_doe_resume.pdf"`;
 
@@ -394,33 +393,35 @@ export default function DocsClient() {
             {/* ── Authentication ────────────────────────────────────────── */}
             <Section id="authentication" title="Authentication">
               <p className="docs-prose">
-                All requests require a bearer token in the{" "}
-                <code className="docs-inline-code">Authorization</code> header.
-                API keys are tied to a workspace and can be revoked per-project
-                from your dashboard.
+                The current deployed backend does not require a bearer token.
+                Requests can be sent directly to the API as long as the server
+                is reachable.
               </p>
               <CodeBlock
                 lang="http"
-                filename="Authorization header"
-                code={`Authorization: Bearer vfa_live_••••••••••••••••••••••••`}
+                filename="Current deployed usage"
+                code={`No Authorization header required`}
               />
               <Callout type="warning">
-                Never expose your API key in client-side JavaScript. Proxy all
-                requests through your server or use a serverless function.
+                The current deployment is exposed over plain HTTP on port{" "}
+                <code className="docs-inline-code">4000</code>. Put it behind
+                HTTPS or a reverse proxy for production use.
               </Callout>
             </Section>
 
             {/* ── Base URL ──────────────────────────────────────────────── */}
             <Section id="base-url" title="Base URL & Versioning">
               <p className="docs-prose">
-                The current stable version is <strong>v1</strong>. We follow
-                semantic versioning; breaking changes are released under a new
-                version prefix with a 90-day deprecation window.
+                The current deployed backend is served directly from the host
+                below. Routes are exposed under the{" "}
+                <code className="docs-inline-code">/api</code> prefix and do not
+                currently use a separate{" "}
+                <code className="docs-inline-code">v1</code> version segment.
               </p>
               <CodeBlock
                 lang="text"
                 filename="Base URL"
-                code={`https://api.verifai.dev/v1`}
+                code={`http://65.20.88.66:4000`}
               />
               <div className="docs-table-wrap">
                 <table className="docs-table">
@@ -433,7 +434,7 @@ export default function DocsClient() {
                   </thead>
                   <tbody>
                     <tr>
-                      <td>v1</td>
+                      <td>current</td>
                       <td>
                         <span className="docs-status docs-status--active">
                           Active
@@ -451,7 +452,7 @@ export default function DocsClient() {
               <div className="docs-endpoint-bar">
                 <Tag color="post">POST</Tag>
                 <code className="docs-endpoint-path">
-                  /v1/analyze-resume
+                  /api/analyze-resume
                 </code>
                 <Tag color="beta">Beta</Tag>
               </div>
@@ -683,7 +684,7 @@ export default function DocsClient() {
                 <code className="docs-endpoint-path">/api/verify/leetcode</code>
               </div>
               <p className="docs-prose">
-                Verify a candidate's LeetCode profile specifically to check for rating inflation and 
+                Verify a candidate&apos;s LeetCode profile specifically to check for rating inflation and 
                 discrepancies in solved problem counts.
               </p>
               <h3 className="docs-h3">Request Body</h3>
@@ -780,7 +781,7 @@ export default function DocsClient() {
               <CodeBlock
                 lang="bash"
                 filename="cURL"
-                code={`curl https://api.verifai.dev/health`}
+                code={`curl http://65.20.88.66:4000/health`}
               />
             </Section>
 
