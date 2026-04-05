@@ -1,4 +1,4 @@
-import { verifyLeetCode } from "./leetCodeVerify.js";
+import { verifyLeetCode } from "./leetcodeVerify.js";
 import { verifyCodeforces } from "./codeforcesVerify.js";
 import { verifyCodechef } from "./codechefVerify.js";
 

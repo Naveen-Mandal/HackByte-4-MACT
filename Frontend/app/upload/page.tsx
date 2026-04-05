@@ -4,7 +4,7 @@ import { useState } from "react";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ??
-  "http://127.0.0.1:4000";
+  "http://65.20.88.66:4000";
 
 type JsonValue = Record<string, unknown>;
 
