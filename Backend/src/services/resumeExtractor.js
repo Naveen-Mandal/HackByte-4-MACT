@@ -42,6 +42,111 @@ Resume Text:
 ${resumeText}${hyperlinkSection}`;
 }
 
+function createEmptyExtractedData() {
+  return {
+    githubProfile: "",
+    contactInfo: { name: "", email: "" },
+    codingProfiles: {},
+    internships: [],
+    projects: [],
+    skills: [],
+    achievements: [],
+    certificates: [],
+  };
+}
+
+function findFirstMatch(text, pattern) {
+  const match = text.match(pattern);
+  return match ? match[1] || match[0] : "";
+}
+
+function extractProfileUrl(text, hyperlinks, hostPattern) {
+  const hyperlinkMatch = hyperlinks.find((link) => hostPattern.test(link));
+  if (hyperlinkMatch) {
+    return hyperlinkMatch;
+  }
+
+  return findFirstMatch(text, new RegExp(`https?:\\/\\/(?:www\\.)?${hostPattern.source}\\/[^\\s)]+`, "i"));
+}
+
+function extractUsernameFromUrl(url) {
+  if (!url) {
+    return "";
+  }
+
+  const match = url.match(/\/([^\/?#]+)\/?$/);
+  return match ? match[1] : "";
+}
+
+function buildFallbackExtraction(text, hyperlinks = [], reason = "") {
+  const githubUrl = extractProfileUrl(text, hyperlinks, /github\.com/i);
+  const leetcodeUrl = extractProfileUrl(text, hyperlinks, /leetcode\.com/i);
+  const codeforcesUrl = extractProfileUrl(text, hyperlinks, /codeforces\.com/i);
+  const codechefUrl = extractProfileUrl(text, hyperlinks, /codechef\.com/i);
+  const data = createEmptyExtractedData();
+
+  data.githubProfile = githubUrl;
+  data.contactInfo = {
+    name: findFirstMatch(text, /^([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){1,3})/m),
+    email: findFirstMatch(text, /([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})/i),
+  };
+
+  if (leetcodeUrl) {
+    data.codingProfiles.leetcode = {
+      username: extractUsernameFromUrl(leetcodeUrl),
+      claims: {},
+    };
+  }
+
+  if (codeforcesUrl) {
+    data.codingProfiles.codeforces = {
+      username: extractUsernameFromUrl(codeforcesUrl),
+      claims: {},
+    };
+  }
+
+  if (codechefUrl) {
+    data.codingProfiles.codechef = {
+      username: extractUsernameFromUrl(codechefUrl),
+      claims: {},
+    };
+  }
+
+  if (reason) {
+    data._extractionWarning = reason;
+  }
+
+  return data;
+}
+
+function parseGeminiJson(text) {
+  const normalized = String(text || "").trim();
+  const withoutFences = normalized.replace(/```json\s*|```/gi, "").trim();
+  const candidates = [normalized, withoutFences];
+
+  const objectStart = withoutFences.indexOf("{");
+  const objectEnd = withoutFences.lastIndexOf("}");
+  if (objectStart !== -1 && objectEnd !== -1 && objectEnd > objectStart) {
+    candidates.push(withoutFences.slice(objectStart, objectEnd + 1));
+  }
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // Try next candidate shape.
+    }
+  }
+
+  const error = new Error("Failed to parse Gemini output as JSON.");
+  error.statusCode = 500;
+  throw error;
+}
+
 async function extractJsonWithGemini(prompt) {
   if (!process.env.GEMINI_API_KEY) {
     const error = new Error("Set GEMINI_API_KEY to enable Gemini-based extraction.");
@@ -75,20 +180,25 @@ async function extractJsonWithGemini(prompt) {
 
   const data = await response.json();
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-  
-  try {
-    return JSON.parse(text);
-  } catch (e) {
-    const error = new Error("Failed to parse Gemini output as JSON.");
-    error.statusCode = 500;
-    throw error;
-  }
+
+  return parseGeminiJson(text);
 }
 
 async function extractResumeData(pdfBuffer, hyperlinks = []) {
   const text = await extractTextFromPdf(pdfBuffer);
   const prompt = buildResumeExtractionPrompt(text, hyperlinks);
-  const extractedJson = await extractJsonWithGemini(prompt);
+  let extractedJson;
+
+  try {
+    extractedJson = await extractJsonWithGemini(prompt);
+  } catch (error) {
+    console.warn("Gemini extraction failed, using fallback extraction:", error.message);
+    extractedJson = buildFallbackExtraction(
+      text,
+      hyperlinks,
+      `Fallback extraction used because structured AI extraction failed: ${error.message}`,
+    );
+  }
   
   return {
     rawText: text,

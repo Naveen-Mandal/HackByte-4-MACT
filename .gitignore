@@ -1,3 +1,5 @@
 node_modules/
 .env
 .agents/
+.log
+Backend/runtime-errors.log
